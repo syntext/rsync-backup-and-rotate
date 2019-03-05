@@ -18,15 +18,16 @@ how to setup SSH key authentication.
 rsync
 
     backup-rsync
-        -e /etc/excludefile     # (optional) path to excludefile, default is /root/.excludeliste-rsync
+        -e /etc/excludefile     # (optional) path to excludefile, default is /opt/backups/exclude.list
         -o extra rsync options  # (optional) additional rsync parameters (see "man rsync")
-        -p /backup/path         # (optional) path to backup, default is "/home/backup"
+        -s /                    # (optional) backup source path, default is "/"
+        -d /opt/backups         # (optional) backup destination path, default is "/opt/backups"
         <fqdn-servername>       # fully qualified domain name of the server to be backed up
 
 rotate
 
     backup-rotate
-        -p /backup/path         # (optional) path to backup, default is "/home/backup"
+        -d /opt/backups         # (optional) path to backup, default is "/opt/backups"
         <fqdn-servername>       # fully qualified domain name of the server to be backed up
 
 The backup will be written into the directory `/backup/path/<fqdn-servername>/daily.0/`
@@ -51,7 +52,7 @@ the scripts.
 
 Example to run script on home Synology to backup web server:
 
-    ash /volume1/data/bin/rsync-backup-and-rotate/backup-rsync -e /volume1/data/bin/server-backup.excludelist -p /volume1/data/Data my.server.com &> /volume1/data/Data/server-backup-rsync.log
+    ash /volume1/data/bin/rsync-backup-and-rotate/backup-rsync -e /volume1/data/bin/server-backup.excludelist -d /volume1/data/Data my.server.com &> /volume1/data/Data/server-backup-rsync.log
 
 This script can be scheduled and executed via Task Scheduler (Control Panel/Task Scheduler, Create "User-defined script").
 

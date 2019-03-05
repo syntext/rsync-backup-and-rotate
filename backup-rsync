@@ -6,24 +6,28 @@
 # Original source: https://www.heinlein-support.de/projekte/rsync-backup/backup-rsync
 #
 # Translated and enhanced by Mattanja Kern <https://github.com/mattanja/rsync-backup-and-rotate>
+# Enhanced by Roan Mooij <https://github.com/syntext/rsync-backup-and-rotate>
 #
-# Usage: backup-rsync [-e /etc/excludefile] [-o extra rsync options] [-p /backup/path] <fqdn-servername>
+# Usage: backup-rsync [-e /etc/excludefile] [-o extra rsync options] [-s /backup/source/path] [-d /backup/dest/path] <fqdn-servername>
 #
 
 # ### Configuration
 # Check available space?
 CHECK_HDMINFREE=true
-HDMINFREE=95
+HDMINFREE=500
 
 # Mount backup partition as readonly after writing the backup?
 MOUNT_RO=false
 MOUNT_DEVICE=/dev/md3
 
-# Backup path (server name and rotation dirs will be appended)
-DATA_PATH=/home/backup
+# Backup source path
+SOURCE_PATH=/
+
+# Backup destination path (server name and rotation dirs will be appended)
+DEST_PATH=/opt/backups
 
 # Liste von Dateipattern, die nicht gebackupt werden sollen
-EXCLUDES=/root/.excludeliste-rsync
+EXCLUDES=/opt/backups/exclude.list
 
 # Additional rsync options.
 # Example: EXTRAOPT="--bwlimit=196" to limit bandwidth-usage
@@ -31,7 +35,7 @@ EXTRAOPT=""
 
 # Read parameter options
 OPTIND=1
-while getopts ":e:o:p:" opt; do
+while getopts ":e:o:s:d:" opt; do
 	case $opt in
 		e)
 			EXCLUDES="$OPTARG"
@@ -39,8 +43,11 @@ while getopts ":e:o:p:" opt; do
 		o)
 			EXTRAOPT="$OPTARG"
 			;;
-		p)
-			DATA_PATH="$OPTARG"
+		s)
+			SOURCE_PATH="$OPTARG"
+			;;
+		d)
+			DEST_PATH="$OPTARG"
 			;;
 		\?)
 			echo "Invalid option: -$OPTARG" >&2
@@ -67,14 +74,14 @@ fi
 # Log config info
 echo "Extra options: $EXTRAOPT"
 logger "Extra options: $EXTRAOPT"
-echo "Backup path: $DATA_PATH"
-logger "Backup path: $DATA_PATH"
+echo "Backup path: $DEST_PATH"
+logger "Backup path: $DEST_PATH"
 
 # If server is localhost, use simple local path
 if [ $SERVER = "localhost" ] ; then
-	RSYNCSERVERPATH="/"
+	RSYNCSERVERPATH=$SOURCE_PATH
 else
-	RSYNCSERVERPATH="$SERVER:/"
+	RSYNCSERVERPATH="$SERVER:$SOURCE_PATH"
 fi
 
 # Make sure file for excludelist exists
@@ -93,8 +100,8 @@ fi
 # Check disk space
 GETPERCENTAGE='s/.* \([0-9]\{1,3\}\)%.*/\1/'
 if $CHECK_HDMINFREE ; then
-	KBISFREE=`df /$DATA_PATH | tail -n1 | sed -e "$GETPERCENTAGE"`
-	INODEISFREE=`df -i /$DATA_PATH | tail -n1 | sed -e "$GETPERCENTAGE"`
+	KBISFREE=`df /$DEST_PATH | tail -n1 | sed -e "$GETPERCENTAGE"`
+	INODEISFREE=`df -i /$DEST_PATH | tail -n1 | sed -e "$GETPERCENTAGE"`
 	if [ $KBISFREE -ge $HDMINFREE -o $INODEISFREE -ge $HDMINFREE ] ; then
 		echo "Fatal: Not enough space left for rsyncing backups!"
 		logger "Fatal: Not enough space left for rsyncing backups!"
@@ -104,8 +111,8 @@ fi
 
 # Mount disk as read/write if configured
 if $MOUNT_RO ; then
-	if `mount -o remount,rw $MOUNT_DEVICE $DATA_PATH` ; then
-	echo mount -o remount,rw $MOUNT_DEVICE $DATA_PATH
+	if `mount -o remount,rw $MOUNT_DEVICE $DEST_PATH` ; then
+	echo mount -o remount,rw $MOUNT_DEVICE $DEST_PATH
 		echo "Error: Could not remount $MOUNT_DEVICE readwrite"
 		logger "Error: Could not remount $MOUNT_DEVICE readwrite"
 		exit
@@ -113,8 +120,8 @@ if $MOUNT_RO ; then
 fi
 
 # Ggf. Verzeichnis anlegen
-if ! [ -d $DATA_PATH/$SERVER/daily.0 ] ; then
-	mkdir -p $DATA_PATH/$SERVER/daily.0
+if ! [ -d $DEST_PATH/$SERVER/daily.0 ] ; then
+	mkdir -p $DEST_PATH/$SERVER/daily.0
 fi
 
 # Los geht`s: rsync zieht ein Vollbackup
@@ -125,7 +132,7 @@ rsync -avz --numeric-ids -e ssh \
 	--delete --delete-excluded	\
 	--exclude-from="$EXCLUDES" $EXTRAOPT \
 	$RSYNCSERVERPATH \
-	$DATA_PATH/$SERVER/daily.0
+	$DEST_PATH/$SERVER/daily.0
 
 # Validate return code
 # 0 = no error,
@@ -137,7 +144,7 @@ if ! [ $? = 24 -o $? = 0 ] ; then
 fi
 
 # Touch dir to set backup date
-touch $DATA_PATH/$SERVER/daily.0
+touch $DEST_PATH/$SERVER/daily.0
 
 # Done
 echo "Finished rsync backup from $SERVER..."
@@ -148,7 +155,7 @@ sync
 
 # Remount disk as read-only
 if $MOUNT_RO ; then
-	if `mount -o remount,ro $MOUNT_DEVICE $DATA_PATH` ; then
+	if `mount -o remount,ro $MOUNT_DEVICE $DEST_PATH` ; then
 		echo "Error: Could not remount $MOUNT_DEVICE readonly"
 		logger "Error: Could not remount $MOUNT_DEVICE readonly"
 		exit
